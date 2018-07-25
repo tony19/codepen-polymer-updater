@@ -5,8 +5,10 @@ const request = require('request-promise-native');
 async function loginToCodepen(page) {
   await page.goto('https://codepen.io/login');
   if (await isLoggedIn(page)) {
+    console.log('already logged in');
     return;
   }
+  console.log('logging in');
   await page.type('#login-email-field', process.env.CODEPEN_USER, {delay: 100});
   await page.type('#login-password-field_', process.env.CODEPEN_PWD, {delay: 100});
   await page.click('#log-in-button');
@@ -15,7 +17,8 @@ async function loginToCodepen(page) {
 }
 
 async function isLoggedIn(page) {
-  const loggedIn = await page.$$('body.logged-out');
+  await page.waitForSelector('body');
+  const loggedIn = await page.$$('body.body-login');
   return loggedIn.length === 0;
 }
 
@@ -96,7 +99,6 @@ async function getBrowserDebuggerUrl() {
       json: true
     });
   } catch (e) {
-    console.warn('no puppeteer instance found');
   }
   return config && config.webSocketDebuggerUrl;
 }
@@ -104,10 +106,12 @@ async function getBrowserDebuggerUrl() {
 async function getBrowser() {
   const browserWSEndpoint = await getBrowserDebuggerUrl();
   if (browserWSEndpoint) {
+    console.log(`reusing browser at ${browserWSEndpoint}`);
     return puppeteer.connect({
       browserWSEndpoint,
     });
   } else {
+    console.log(`launching new browser`);
     return puppeteer.launch({
       headless: false,
       args: [
@@ -127,6 +131,6 @@ async function getBrowser() {
     const numUpdated = await updatePens(page);
     console.log(`updated ${numUpdated} pen(s)`);
   } finally {
-    //await browser.close();
+    await browser.close();
   }
 })();
