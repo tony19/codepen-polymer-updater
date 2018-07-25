@@ -3,30 +3,95 @@ const puppeteer = require('puppeteer');
 const request = require('request-promise-native');
 
 async function loginToCodepen(page) {
-  await page.goto('https://codepen.io/login')
-  await page.type('#login-email-field', process.env.CODEPEN_USER)
-  await page.type('#login-password-field_', process.env.CODEPEN_PWD)
-  await page.click('#log-in-button')
-  await page.waitForNavigation()
+  await page.goto('https://codepen.io/login');
+  if (await isLoggedIn(page)) {
+    return;
+  }
+  await page.type('#login-email-field', process.env.CODEPEN_USER, {delay: 100});
+  await page.type('#login-password-field_', process.env.CODEPEN_PWD, {delay: 100});
+  await page.click('#log-in-button');
+  await page.waitForNavigation({timeout: 0});
 }
 
-async function getPens(page) {
-  let pageIndex = 6;
+async function isLoggedIn(page) {
+  const loggedIn = await page.$$('body.logged-out');
+  return loggedIn.length === 0;
+}
+
+async function updatePens(page) {
+  let pageIndex = 1;
   let searchTerm = 'polymer';
   await page.goto(`https://codepen.io/dashboard?type=search&opts_itemType=pen&opts_searchTerm=${searchTerm}&opts_order=popularity&opts_depth=everything&opts_showForks=true&displayType=list&previewType=iframe&page=${pageIndex}`);
-  await page.waitForSelector('.title a');
-  const links = await page.evaluate(() => {
-    const links = document.querySelectorAll('.title a');
-    console.log({links});
+
+  while (true) {
+    await page.waitForSelector('.title a');
+    const penUrls = await page.$$eval('.title a', anchors => Array.from(anchors).map(a => a.href));
+    for (const url of penUrls) {
+      await page.goto(url);
+      const isUpdated = await updatePen(page);
+      if (isUpdated) {
+        await page.waitFor(750);
+      }
+      console.log(`${isUpdated ? '✅' : ''} ${url}`);
+      await page.goBack();
+    }
+
+    // click next
+    const nextBtn = await page.$$('.pagination-button:nth-child(2)');
+    if (nextBtn.length === 0) {
+      break;
+    }
+    await page.click('.pagination-button:nth-child(2)');
+  }
+}
+
+async function updatePen(page) {
+  return await page.evaluate(() => {
+    const replacements = [
+      {
+        search: /\/\/polygit.org\/polymer\+:?v?1.*\/components\//ig,
+        replacement: '//cdn.rawgit.com/download/polymer-cdn/1.8.0/lib/',
+      },
+      {
+        search: /\/\/polygit.org\/polymer\+:?v?2.*\/components\//ig,
+        replacement: '//cdn.rawgit.com/download/polymer-cdn/2.6.0.2/lib/',
+      },
+      {
+        search: /webcomponents-lite.min.js/ig,
+        replacement: 'webcomponents-lite.js',
+      }
+    ];
+
+    const codeMirror = document.querySelector('.CodeMirror').CodeMirror;
+    let code = codeMirror.getValue();
+
+    let isUpdated = false;
+    for (const {search, replacement} of replacements) {
+      if (search.test(code)) {
+        code = code.replace(search, replacement);
+        isUpdated = true;
+      }
+    }
+
+    if (isUpdated) {
+      codeMirror.setValue(code);
+      document.querySelector('#update').click();
+    }
+
+    return isUpdated;
   });
 }
 
 async function getBrowserDebuggerUrl() {
   let config = null;
-  config = await request.get({
-    uri: 'http://0.0.0.0:9222/json/version',
-    json: true
-  });
+  try {
+    config = await request.get({
+      uri: 'http://0.0.0.0:9222/json/version',
+      json: true
+    });
+  } catch (e) {
+    console.warn('no puppeteer instance found');
+  }
   return config && config.webSocketDebuggerUrl;
 }
 
@@ -53,11 +118,8 @@ async function getBrowser() {
 
   try {
     await loginToCodepen(page);
-    await getPens(page);
-    // await page.screenshot({
-    //     path: 'full.png',
-    //     fullPage: true
-    // });
+    await updatePens(page);
+    console.log('done');
   } finally {
     //await browser.close();
   }
