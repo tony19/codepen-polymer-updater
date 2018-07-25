@@ -10,6 +10,7 @@ async function loginToCodepen(page) {
   await page.type('#login-email-field', process.env.CODEPEN_USER, {delay: 100});
   await page.type('#login-password-field_', process.env.CODEPEN_PWD, {delay: 100});
   await page.click('#log-in-button');
+  console.log('handle the CAPTCHA challenge...i\'ll wait :)');
   await page.waitForNavigation({timeout: 0});
 }
 
@@ -19,8 +20,9 @@ async function isLoggedIn(page) {
 }
 
 async function updatePens(page) {
-  let pageIndex = 1;
-  let searchTerm = 'polymer';
+  let numUpdated = 0;
+  const pageIndex = 1;
+  const searchTerm = 'polymer';
   await page.goto(`https://codepen.io/dashboard?type=search&opts_itemType=pen&opts_searchTerm=${searchTerm}&opts_order=popularity&opts_depth=everything&opts_showForks=true&displayType=list&previewType=iframe&page=${pageIndex}`);
 
   while (true) {
@@ -30,10 +32,12 @@ async function updatePens(page) {
       await page.goto(url);
       const isUpdated = await updatePen(page);
       if (isUpdated) {
-        await page.waitFor(750);
+        await page.waitFor(700);
+        numUpdated++;
       }
-      console.log(`${isUpdated ? '✅' : ''} ${url}`);
+      console.log(`${url}${isUpdated ? '✅' : ''}`);
       await page.goBack();
+      await page.waitFor(Math.random() * 100);
     }
 
     // click next
@@ -42,7 +46,9 @@ async function updatePens(page) {
       break;
     }
     await page.click('.pagination-button:nth-child(2)');
+    await page.waitFor(5000);
   }
+  return numUpdated;
 }
 
 async function updatePen(page) {
@@ -118,8 +124,8 @@ async function getBrowser() {
 
   try {
     await loginToCodepen(page);
-    await updatePens(page);
-    console.log('done');
+    const numUpdated = await updatePens(page);
+    console.log(`updated ${numUpdated} pen(s)`);
   } finally {
     //await browser.close();
   }
