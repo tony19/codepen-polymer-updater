@@ -6,8 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "tony19@gmail.com",
+  "license": "MIT",
   "dependencies": {
     "dotenv": "^6.0.0",
     "puppeteer": "^1.6.1",
